@@ -1,0 +1,16 @@
+[package]
+name = "nucleo_dart"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "nucleo_dart"
+path = "src/lib.rs"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+nucleo = "0.5.0"
+
+[profile.release]
+lto = true
+codegen-units = 1

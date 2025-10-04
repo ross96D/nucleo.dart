@@ -1,0 +1,15 @@
+# Run with `flutter pub run ffigen --config ffigen.yaml`.
+name: NativeNucleoBindings
+description: Bindings for `rust/nucleo_dart.h`
+output: "lib/nucleo_dart_bindings.dart"
+headers:
+  entry-points:
+    - "rust/nucleo_dart.h"
+  include-directives:
+    - "rust/nucleo_dart.h"
+
+comments:
+  style: doxygen
+  length: full
+
+ffi-native:

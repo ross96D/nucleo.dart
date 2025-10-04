@@ -1,0 +1,172 @@
+library;
+
+import 'dart:convert';
+import 'dart:ffi';
+import 'dart:typed_data';
+import 'package:ffi/ffi.dart';
+
+import 'package:nucleo_dart/nucleo_dart_bindings.dart';
+
+class NucleoDart implements Finalizable {
+  static Pointer<NativeFunction<Void Function(Pointer<NucleoHandle>)>> _addressNucleoDartDestroy =
+      Native.addressOf(nucleo_dart_destroy);
+  static final _finalizeNucleo = NativeFinalizer(_addressNucleoDartDestroy.cast());
+
+  static _relaseArena(Arena arena) => arena.releaseAll();
+  static final _finalizeEntries = Finalizer(_relaseArena);
+
+  static _closeCallback(NativeCallable<Void Function()> cb) => cb.close();
+  static final _finalizeCallback = Finalizer(_closeCallback);
+
+  late final Pointer<NucleoHandle> _handle;
+  late final Arena arenaEntriesString;
+  late NativeCallable<Void Function()> _notify;
+  String? _prevText;
+
+  NucleoDart(void Function() changeNotify) {
+    arenaEntriesString = Arena();
+
+    _notify = NativeCallable<Void Function()>.listener(changeNotify);
+    _handle = nucleo_dart_new(_notify.nativeFunction);
+
+    _finalizeNucleo.attach(this, Pointer.fromAddress(_handle.address), detach: this);
+    _finalizeEntries.attach(this, arenaEntriesString, detach: this);
+    _finalizeCallback.attach(this, _notify, detach: this);
+  }
+
+  void destroy() {
+    _finalizeNucleo.detach(this);
+    nucleo_dart_destroy(_handle);
+
+    _finalizeEntries.detach(this);
+    arenaEntriesString.releaseAll();
+
+    _finalizeCallback.detach(this);
+    _notify.close();
+  }
+
+  void add(String entry) {
+    final strNative = entry.toNativeUtf8(allocator: arenaEntriesString);
+
+    using((arena) {
+      final str = arena<NucleoDartStringMut>();
+      str.ref.len = strNative.length;
+      str.ref.ptr = strNative.cast();
+
+      nucleo_dart_add(_handle, str.ref);
+    });
+  }
+
+  static List<({int addr, int len})> _fromEntries(Arena arena, Iterable<Uint8List> entries) {
+    int totalBytes = 0;
+    for (final entry in entries) {
+      totalBytes += entry.length;
+    }
+    Pointer<Uint8> listStart = arena<Uint8>(totalBytes);
+    final response = <({int addr, int len})>[];
+
+    for (final entry in entries) {
+      response.add((addr: listStart.address, len: entry.length));
+      listStart.asTypedList(entry.length).setRange(0, entry.length, entry);
+      listStart = listStart + entry.length;
+    }
+    return response;
+  }
+
+  void addAll(Iterable<String> entries) {
+    final length = entries.length;
+
+    final entriesNative = _fromEntries(arenaEntriesString, entries.map(utf8.encode));
+
+    using((arena) {
+      final list = arena<NucleoDartStringMut>(length);
+
+      int i = 0;
+      for (final entry in entriesNative) {
+        final str = list + i;
+        str.ref.len = entry.len;
+        str.ref.ptr = Pointer.fromAddress(entry.addr);
+
+        i += 1;
+      }
+
+      nucleo_dart_add_all(_handle, list, length);
+    });
+  }
+
+  Snapshot getSnapshot() {
+    final ptr = nucleo_dart_get_snapshot(_handle);
+    return Snapshot._(ptr);
+  }
+
+  void reparse(String newText) {
+    final append = _prevText != null && newText.startsWith(_prevText!);
+
+    using((arena) {
+      final strNative = newText.toNativeUtf8(allocator: arena);
+      final str = arena<NucleoDartString>();
+      str.ref.len = strNative.length;
+      str.ref.ptr = strNative.cast();
+
+      nucleo_dart_reparse(_handle, str.ref, append ? IsAppend.IsAppendYes : IsAppend.IsAppendNo);
+    });
+    _prevText = newText;
+  }
+
+  /// The main way to interact with the matcher, this should be called regularly
+  /// (for example each time a frame is rendered).
+  ///
+  /// To avoid excessive redraws this method will wait timeout milliseconds for the worker
+  /// therad to finish.
+  ///
+  /// It is recommend to set the timeout to 10ms.
+  void tick([int timoutMs = 10]) {
+    nucleo_dart_tick(_handle, timoutMs);
+  }
+}
+
+class Snapshot {
+  final Pointer<SnapshotHandle> _handle;
+
+  Snapshot._(this._handle);
+
+  String item(int index) {
+    assert(index >= 0);
+    return nucleo_dart_snapshot_get_item(_handle, index).toDartString();
+  }
+
+  String matchedItem(int index) {
+    assert(index >= 0);
+    return nucleo_dart_snapshot_get_matched_item(_handle, index).toDartString();
+  }
+
+  List<String> matchedItems([int start = 0, int? end]) {
+    end ??= matchedCount;
+    final response = <String>[];
+
+    final callback = NativeCallable<Void Function(NucleoDartString)>.isolateLocal((
+      NucleoDartString v,
+    ) {
+      response.add(v.toDartString());
+    });
+
+    nucleo_dart_snapshot_get_matched_items(_handle, start, end, callback.nativeFunction);
+    callback.close();
+    return response;
+  }
+
+  int get matchedCount {
+    return nucleo_dart_snapshot_get_matched_item_count(_handle);
+  }
+
+  int get count {
+    return nucleo_dart_snapshot_get_item_count(_handle);
+  }
+}
+
+extension on NucleoDartString {
+  String toDartString() {
+    Pointer<Utf8> nativeStrUtf8 = this.ptr.cast();
+    return nativeStrUtf8.toDartString(length: this.len);
+  }
+}
