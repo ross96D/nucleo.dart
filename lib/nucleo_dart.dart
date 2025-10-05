@@ -45,11 +45,12 @@ class NucleoDart implements Finalizable {
     _notify.close();
   }
 
-  void add(String entry) {
+  void add(int index, String entry) {
     final strNative = entry.toNativeUtf8(allocator: arenaEntriesString);
 
     using((arena) {
       final str = arena<NucleoDartStringMut>();
+      str.ref.index = index;
       str.ref.len = strNative.length;
       str.ref.ptr = strNative.cast();
 
@@ -73,7 +74,7 @@ class NucleoDart implements Finalizable {
     return response;
   }
 
-  void addAll(Iterable<String> entries) {
+  void addAll(Iterable<String> entries, [List<int>? entriesIndexes]) {
     final length = entries.length;
 
     final entriesNative = _fromEntries(arenaEntriesString, entries.map(utf8.encode));
@@ -84,6 +85,7 @@ class NucleoDart implements Finalizable {
       int i = 0;
       for (final entry in entriesNative) {
         final str = list + i;
+        str.ref.index = entriesIndexes?[i] ?? i;
         str.ref.len = entry.len;
         str.ref.ptr = Pointer.fromAddress(entry.addr);
 
@@ -130,24 +132,44 @@ class Snapshot {
 
   Snapshot._(this._handle);
 
-  String item(int index) {
+  (int, String) item(int index) {
     assert(index >= 0);
     return nucleo_dart_snapshot_get_item(_handle, index).toDartString();
   }
 
-  String matchedItem(int index) {
+  (int, String) matchedItem(int index) {
     assert(index >= 0);
     return nucleo_dart_snapshot_get_matched_item(_handle, index).toDartString();
   }
 
-  List<String> matchedItems([int start = 0, int? end]) {
+  int matchedItemIndex(int index) {
+    assert(index >= 0);
+    return nucleo_dart_snapshot_get_matched_item(_handle, index).index;
+  }
+
+  List<(int, String)> matchedItems([int start = 0, int? end]) {
     end ??= matchedCount;
-    final response = <String>[];
+    final response = <(int, String)>[];
 
     final callback = NativeCallable<Void Function(NucleoDartString)>.isolateLocal((
       NucleoDartString v,
     ) {
       response.add(v.toDartString());
+    });
+
+    nucleo_dart_snapshot_get_matched_items(_handle, start, end, callback.nativeFunction);
+    callback.close();
+    return response;
+  }
+
+  List<int> matchedItemsIndex([int start = 0, int? end]) {
+    end ??= matchedCount;
+    final response = <int>[];
+
+    final callback = NativeCallable<Void Function(NucleoDartString)>.isolateLocal((
+      NucleoDartString v,
+    ) {
+      response.add(v.index);
     });
 
     nucleo_dart_snapshot_get_matched_items(_handle, start, end, callback.nativeFunction);
@@ -165,8 +187,8 @@ class Snapshot {
 }
 
 extension on NucleoDartString {
-  String toDartString() {
+  (int, String) toDartString() {
     Pointer<Utf8> nativeStrUtf8 = this.ptr.cast();
-    return nativeStrUtf8.toDartString(length: this.len);
+    return (this.index, nativeStrUtf8.toDartString(length: this.len));
   }
 }

@@ -7,30 +7,38 @@ import 'package:test/test.dart';
 void main() {
   test('FFI call works', () {
     final instance = NucleoDart(() {});
-    instance.add("entry1");
-    instance.add("entry2");
-    instance.add("entry3");
+    instance.add(0, "entry1");
+    instance.add(1, "entry2");
+    instance.add(2, "entry3");
+
+    instance.reparse("");
+    instance.tick();
+    var items = instance.getSnapshot().matchedItems().toList();
+    expect(items, equals([(0, "entry1"), (1, "entry2"), (2, "entry3")]));
 
     instance.reparse("entry");
     instance.tick();
-    final items = instance.getSnapshot().matchedItems().toList();
-    expect(["entry1", "entry2", "entry3"], equals(items));
+    items = instance.getSnapshot().matchedItems().toList();
+    expect(items, equals([(0, "entry1"), (1, "entry2"), (2, "entry3")]));
 
     instance.reparse("entry2");
     instance.tick();
-    final items2 = instance.getSnapshot().matchedItems().toList();
-    expect(["entry2"], equals(items2));
+    items = instance.getSnapshot().matchedItems().toList();
+    expect(items, equals([(1, "entry2")]));
   });
 
   test('Performance', () {
-    final data = File("/home/ross/programming/my/nucleo.dart/test.txt").readAsStringSync();
+    final process = Process.runSync("fish", ["-c", "history"]);
+    final data = process.stdout;
     final lines = data.split("\n");
 
     final sw = Stopwatch()..start();
     final instance = NucleoDart(() {});
 
+    int i = 0;
     for (final line in lines) {
-      instance.add(line);
+      instance.add(i, line);
+      i++;
     }
     instance.reparse("some");
     instance.tick();

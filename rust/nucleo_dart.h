@@ -12,11 +12,13 @@ typedef struct SnapshotHandle SnapshotHandle;
 typedef void (*VoidCallbackFn)(void);
 
 typedef struct NucleoDartStringMut {
+  uint32_t index;
   uint8_t *ptr;
   uintptr_t len;
 } NucleoDartStringMut;
 
 typedef struct NucleoDartString {
+  uint32_t index;
   const uint8_t *ptr;
   uintptr_t len;
 } NucleoDartString;

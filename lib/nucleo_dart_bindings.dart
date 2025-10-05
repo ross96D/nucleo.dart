@@ -124,6 +124,9 @@ typedef VoidCallbackFn =
     ffi.Pointer<ffi.NativeFunction<VoidCallbackFnFunction>>;
 
 final class NucleoDartStringMut extends ffi.Struct {
+  @ffi.Uint32()
+  external int index;
+
   external ffi.Pointer<ffi.Uint8> ptr;
 
   @ffi.UintPtr()
@@ -131,6 +134,9 @@ final class NucleoDartStringMut extends ffi.Struct {
 }
 
 final class NucleoDartString extends ffi.Struct {
+  @ffi.Uint32()
+  external int index;
+
   external ffi.Pointer<ffi.Uint8> ptr;
 
   @ffi.UintPtr()

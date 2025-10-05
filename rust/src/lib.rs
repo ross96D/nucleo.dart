@@ -4,7 +4,7 @@ use nucleo::{Config, Nucleo};
 
 #[repr(C)]
 pub struct NucleoHandle {
-    internal: Nucleo<Box<[u8]>>,
+    internal: Nucleo<(u32, Box<[u8]>)>,
 }
 
 pub type VoidCallbackFn = extern "C" fn();
@@ -31,12 +31,14 @@ pub extern "C" fn nucleo_dart_tick(ptr: *mut NucleoHandle, ms: std::ffi::c_uint)
 
 #[repr(C)]
 pub struct NucleoDartStringMut {
+    pub index: u32,
     pub ptr: *mut u8,
     pub len: usize,
 }
 
 #[repr(C)]
 pub struct NucleoDartString {
+    pub index: u32,
     pub ptr: *const u8,
     pub len: usize,
 }
@@ -49,8 +51,8 @@ pub extern "C" fn nucleo_dart_add(ptr: *mut NucleoHandle, item: NucleoDartString
     let slice_ref = unsafe { std::slice::from_raw_parts_mut(item.ptr, item.len) };
     let slice_boxed: Box<[u8]> = slice_ref.into();
 
-    injector.push(slice_boxed, |v, z| {
-        let boxed_str = unsafe { str::from_boxed_utf8_unchecked(v.clone()) };
+    injector.push((item.index, slice_boxed), |v, z| {
+        let boxed_str = unsafe { str::from_boxed_utf8_unchecked(v.1.clone()) };
         z[0] = boxed_str.into();
     });
 }
@@ -70,8 +72,8 @@ pub extern "C" fn nucleo_dart_add_all(
         let slice_ref = unsafe { std::slice::from_raw_parts_mut(item.ptr, item.len) };
         let slice_boxed: Box<[u8]> = slice_ref.into();
 
-        injector.push(slice_boxed, |v, z| {
-            let boxed_str = unsafe { str::from_boxed_utf8_unchecked(v.clone()) };
+        injector.push((item.index, slice_boxed), |v, z| {
+            let boxed_str = unsafe { str::from_boxed_utf8_unchecked(v.1.clone()) };
             z[0] = boxed_str.into();
         });
     }
@@ -114,7 +116,7 @@ pub extern "C" fn nucleo_dart_get_snapshot(ptr: *mut NucleoHandle) -> *const Sna
     return std::ptr::from_ref(reference.internal.snapshot());
 }
 
-type SnapshotHandle = nucleo::Snapshot<Box<[u8]>>;
+type SnapshotHandle = nucleo::Snapshot<(u32, Box<[u8]>)>;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn nucleo_dart_snapshot_get_item_count(handle: *const SnapshotHandle) -> u32 {
@@ -138,8 +140,9 @@ pub extern "C" fn nucleo_dart_snapshot_get_item(
     let reference = unsafe { handle.as_ref().unwrap() };
     let item = unsafe { reference.get_item_unchecked(index) };
     NucleoDartString {
-        ptr: item.data.as_ptr(),
-        len: item.data.len(),
+        index: item.data.0,
+        ptr: item.data.1.as_ptr(),
+        len: item.data.1.len(),
     }
 }
 
@@ -151,8 +154,9 @@ pub extern "C" fn nucleo_dart_snapshot_get_matched_item(
     let reference = unsafe { handle.as_ref().unwrap() };
     let item = reference.get_matched_item(index).unwrap();
     NucleoDartString {
-        ptr: item.data.as_ptr(),
-        len: item.data.len(),
+        index: item.data.0,
+        ptr: item.data.1.as_ptr(),
+        len: item.data.1.len(),
     }
 }
 
@@ -168,8 +172,9 @@ pub extern "C" fn nucleo_dart_snapshot_get_matched_items(
     let reference = unsafe { handle.as_ref().unwrap() };
     reference.matched_items(start..end).for_each(|item| {
         cb(NucleoDartString {
-            ptr: item.data.as_ptr(),
-            len: item.data.len(),
+            index: item.data.0,
+            ptr: item.data.1.as_ptr(),
+            len: item.data.1.len(),
         });
     });
 }
