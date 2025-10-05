@@ -15,7 +15,7 @@ void main(List<String> args) async {
 
         final result = await Process.run("cargo", [
           "build",
-          "--release",
+          // "--release",
         ], workingDirectory: input.packageRoot.resolve("rust").path);
         if (result.exitCode != 0) {
           throw "cargo command exitCode ${result.exitCode}";

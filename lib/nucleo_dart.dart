@@ -1,7 +1,9 @@
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
@@ -94,6 +96,48 @@ class NucleoDart implements Finalizable {
 
       nucleo_dart_add_all(_handle, list, length);
     });
+  }
+
+  Future<void> addAllAsync(List<String> entries, [List<int>? entriesIndexes]) async {
+    using((arena) async {
+      final result = Completer<int>();
+      final resultPort = RawReceivePort();
+      await Isolate.spawn(_buildEntriesAsync, (
+        arenaLocal: arena,
+        arenaEntries: arenaEntriesString,
+        entries: entries,
+        entriesIndexes: entriesIndexes,
+        sp: resultPort.sendPort,
+      ));
+
+      resultPort.handler = (response) {
+        result.complete(response as int);
+      };
+      final listAddr = await result.future;
+      nucleo_dart_add_all(_handle, Pointer.fromAddress(listAddr), entries.length);
+    });
+  }
+
+  static void _buildEntriesAsync(
+    ({Arena arenaLocal, Arena arenaEntries, Iterable<String> entries, List<int>? entriesIndexes, SendPort sp})
+    params,
+  ) {
+    final length = params.entries.length;
+
+    final entriesNative = _fromEntries(params.arenaEntries, params.entries.map(utf8.encode));
+
+    final list = params.arenaLocal<NucleoDartStringMut>(length);
+
+    int i = 0;
+    for (final entry in entriesNative) {
+      final str = list + i;
+      str.ref.index = params.entriesIndexes?[i] ?? i;
+      str.ref.len = entry.len;
+      str.ref.ptr = Pointer.fromAddress(entry.addr);
+
+      i += 1;
+    }
+    params.sp.send(list.address);
   }
 
   Snapshot getSnapshot() {

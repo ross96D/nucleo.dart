@@ -45,4 +45,25 @@ void main() {
 
     print("ELAPSED ${instance.getSnapshot().matchedCount} ${sw.elapsed}");
   });
+
+  test('Performance Async', () async {
+    final process = Process.runSync("fish", ["-c", "history"]);
+    final data = process.stdout;
+    final lines = data.split("\n");
+
+    final sw = Stopwatch()..start();
+    final instance = NucleoDart(() {});
+
+    await instance.addAllAsync(lines);
+
+    // int i = 0;
+    // for (final line in lines) {
+    //   instance.add(i, line);
+    //   i++;
+    // }
+    instance.reparse("some");
+    instance.tick();
+
+    print("ELAPSED ${instance.getSnapshot().matchedCount} ${sw.elapsed}");
+  });
 }
