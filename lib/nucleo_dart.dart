@@ -60,6 +60,17 @@ class NucleoDart implements Finalizable {
     });
   }
 
+  void addNative(int index, Pointer<Uint8> pointer, int length) {
+    using((arena) {
+      final str = arena<NucleoDartStringMut>();
+      str.ref.index = index;
+      str.ref.len = length;
+      str.ref.ptr = pointer.cast();
+
+      nucleo_dart_add(_handle, str.ref);
+    });
+  }
+
   static List<({int addr, int len})> _fromEntries(Arena arena, Iterable<Uint8List> entries) {
     int totalBytes = 0;
     for (final entry in entries) {
@@ -98,6 +109,25 @@ class NucleoDart implements Finalizable {
     });
   }
 
+  void addAllNative(int index, List<(Pointer<Uint8>, int)> pointers, [List<int>? entriesIndexes]) {
+    assert(entriesIndexes != null ? pointers.length == entriesIndexes.length : true);
+    using((arena) {
+      final list = arena<NucleoDartStringMut>(pointers.length);
+
+      int i = 0;
+      for (final entry in pointers) {
+        final str = list + i;
+        str.ref.index = entriesIndexes?[i] ?? i;
+        str.ref.len = entry.$2;
+        str.ref.ptr = entry.$1;
+
+        i += 1;
+      }
+
+      nucleo_dart_add_all(_handle, list, pointers.length);
+    });
+  }
+
   Future<void> addAllAsync(List<String> entries, [List<int>? entriesIndexes]) async {
     using((arena) async {
       final result = Completer<int>();
@@ -119,7 +149,13 @@ class NucleoDart implements Finalizable {
   }
 
   static void _buildEntriesAsync(
-    ({Arena arenaLocal, Arena arenaEntries, Iterable<String> entries, List<int>? entriesIndexes, SendPort sp})
+    ({
+      Arena arenaLocal,
+      Arena arenaEntries,
+      Iterable<String> entries,
+      List<int>? entriesIndexes,
+      SendPort sp,
+    })
     params,
   ) {
     final length = params.entries.length;
