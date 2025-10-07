@@ -52,7 +52,13 @@ pub extern "C" fn nucleo_dart_add(ptr: *mut NucleoHandle, item: NucleoDartString
     let slice_boxed: Box<[u8]> = slice_ref.into();
 
     injector.push((item.index, slice_boxed), |v, z| {
-        let boxed_str = unsafe { str::from_boxed_utf8_unchecked(v.1.clone()) };
+        let boxed_str: Box<str> = match String::from_utf8(v.1.clone().into_vec()) {
+            Ok(v) => v.into_boxed_str(),
+            Err(err) => {
+                println!("ERR {}", err);
+                return;
+            }
+        };
         z[0] = boxed_str.into();
     });
 }
@@ -73,7 +79,13 @@ pub extern "C" fn nucleo_dart_add_all(
         let slice_boxed: Box<[u8]> = slice_ref.into();
 
         injector.push((item.index, slice_boxed), |v, z| {
-            let boxed_str = unsafe { str::from_boxed_utf8_unchecked(v.1.clone()) };
+            let boxed_str: Box<str> = match String::from_utf8(v.1.clone().into_vec()) {
+                Ok(v) => v.into_boxed_str(),
+                Err(err) => {
+                    println!("ERR {}", err);
+                    return;
+                }
+            };
             z[0] = boxed_str.into();
         });
     }
