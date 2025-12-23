@@ -77,10 +77,8 @@ external NucleoDartString nucleo_dart_snapshot_get_item(
   int index,
 );
 
-@ffi.Native<
-  NucleoDartString Function(ffi.Pointer<SnapshotHandle>, ffi.Uint32)
->()
-external NucleoDartString nucleo_dart_snapshot_get_matched_item(
+@ffi.Native<NucleoDartMatch Function(ffi.Pointer<SnapshotHandle>, ffi.Uint32)>()
+external NucleoDartMatch nucleo_dart_snapshot_get_matched_item(
   ffi.Pointer<SnapshotHandle> handle,
   int index,
 );
@@ -98,6 +96,20 @@ external void nucleo_dart_snapshot_get_matched_items(
   int start,
   int end,
   AppendCallbackFn cb,
+);
+
+@ffi.Native<ffi.Void Function(ffi.Pointer<NucleoDartSnapshot2>)>()
+external void nucleo_dart_destroy_join(ffi.Pointer<NucleoDartSnapshot2> handle);
+
+@ffi.Native<
+  NucleoDartSnapshot2 Function(
+    ffi.Pointer<SnapshotHandle>,
+    ffi.Pointer<SnapshotHandle>,
+  )
+>()
+external NucleoDartSnapshot2 nucleo_dart_join_snapshot(
+  ffi.Pointer<SnapshotHandle> handle_a,
+  ffi.Pointer<SnapshotHandle> handle_b,
 );
 
 enum IsAppend {
@@ -143,7 +155,41 @@ final class NucleoDartString extends ffi.Struct {
   external int len;
 }
 
-typedef AppendCallbackFnFunction = ffi.Void Function(NucleoDartString);
-typedef DartAppendCallbackFnFunction = void Function(NucleoDartString);
+final class NucleoDartMatch extends ffi.Struct {
+  @ffi.Uint32()
+  external int score;
+
+  @ffi.Uint32()
+  external int index;
+
+  external ffi.Pointer<ffi.Uint8> ptr;
+
+  @ffi.UintPtr()
+  external int len;
+}
+
+typedef AppendCallbackFnFunction = ffi.Void Function(NucleoDartMatch);
+typedef DartAppendCallbackFnFunction = void Function(NucleoDartMatch);
 typedef AppendCallbackFn =
     ffi.Pointer<ffi.NativeFunction<AppendCallbackFnFunction>>;
+
+final class NucleoDartMMatch extends ffi.Struct {
+  @ffi.Uint32()
+  external int score;
+
+  @ffi.Uint32()
+  external int idx;
+}
+
+final class NucleoDartSnapshot2Match extends ffi.Struct {
+  external NucleoDartMMatch mtch;
+
+  external ffi.Pointer<SnapshotHandle> handle;
+}
+
+final class NucleoDartSnapshot2 extends ffi.Struct {
+  external ffi.Pointer<NucleoDartSnapshot2Match> matches;
+
+  @ffi.UintPtr()
+  external int len;
+}

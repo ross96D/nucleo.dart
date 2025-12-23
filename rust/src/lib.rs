@@ -37,6 +37,14 @@ pub struct NucleoDartStringMut {
 }
 
 #[repr(C)]
+pub struct NucleoDartMatch {
+    pub score: u32,
+    pub index: u32,
+    pub ptr: *const u8,
+    pub len: usize,
+}
+
+#[repr(C)]
 pub struct NucleoDartString {
     pub index: u32,
     pub ptr: *const u8,
@@ -162,17 +170,18 @@ pub extern "C" fn nucleo_dart_snapshot_get_item(
 pub extern "C" fn nucleo_dart_snapshot_get_matched_item(
     handle: *const SnapshotHandle,
     index: u32,
-) -> NucleoDartString {
+) -> NucleoDartMatch {
     let reference = unsafe { handle.as_ref().unwrap() };
     let item = reference.get_matched_item(index).unwrap();
-    NucleoDartString {
+    NucleoDartMatch {
+        score: reference.matches()[index as usize].score,
         index: item.data.0,
         ptr: item.data.1.as_ptr(),
         len: item.data.1.len(),
     }
 }
 
-pub type AppendCallbackFn = extern "C" fn(NucleoDartString);
+pub type AppendCallbackFn = extern "C" fn(NucleoDartMatch);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn nucleo_dart_snapshot_get_matched_items(
@@ -182,11 +191,108 @@ pub extern "C" fn nucleo_dart_snapshot_get_matched_items(
     cb: AppendCallbackFn,
 ) {
     let reference = unsafe { handle.as_ref().unwrap() };
-    reference.matched_items(start..end).for_each(|item| {
-        cb(NucleoDartString {
+    for i in start..end {
+        let item = reference.get_matched_item(i).unwrap();
+        cb(NucleoDartMatch {
+            score: reference.matches()[i as usize].score,
             index: item.data.0,
             ptr: item.data.1.as_ptr(),
             len: item.data.1.len(),
-        });
-    });
+        })
+    }
+}
+
+#[repr(C)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub struct NucleoDartMMatch {
+    pub score: u32,
+    pub idx: u32,
+}
+
+#[repr(C)]
+pub struct NucleoDartSnapshot2Match {
+    pub mtch: NucleoDartMMatch,
+    pub handle: *const SnapshotHandle,
+}
+
+#[repr(C)]
+pub struct NucleoDartSnapshot2 {
+    pub matches: *const NucleoDartSnapshot2Match,
+    pub len: usize,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nucleo_dart_destroy_join(handle: *const NucleoDartSnapshot2) {
+    let boxed = Box::new(unsafe { std::slice::from_raw_parts((*handle).matches, (*handle).len) });
+    drop(boxed);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nucleo_dart_join_snapshot(
+    handle_a: *const SnapshotHandle,
+    handle_b: *const SnapshotHandle,
+) -> NucleoDartSnapshot2 {
+    let reference_a = unsafe { handle_a.as_ref().unwrap() };
+    let reference_b = unsafe { handle_b.as_ref().unwrap() };
+    let matches_a = reference_a.matches();
+    let matches_b = reference_b.matches();
+
+    let mut matches_result: Vec<NucleoDartSnapshot2Match> = vec![];
+    let mut previous_seen_matches = std::collections::HashMap::<&u32, (usize, i32, u32)>::new();
+
+    for (i, mtch) in matches_a.iter().enumerate() {
+        let item = unsafe { reference_a.get_item_unchecked(mtch.idx) };
+        let previous_score = previous_seen_matches.get(&item.data.0);
+        match &previous_score {
+            Some(_) => panic!("invalid state matches_a should not have repeated indxs"),
+            None => {
+                matches_result.push(NucleoDartSnapshot2Match {
+                    mtch: NucleoDartMMatch {
+                        idx: i as u32,
+                        score: mtch.score,
+                    },
+                    handle: handle_a,
+                });
+                previous_seen_matches
+                    .insert(&item.data.0, (matches_result.len() - 1, 0, mtch.score));
+            }
+        }
+    }
+
+    for (i, mtch) in matches_b.iter().enumerate() {
+        let item = unsafe { reference_a.get_item_unchecked(mtch.idx) };
+        let previous_score = previous_seen_matches.get(&item.data.0);
+        match &previous_score {
+            Some(v) => {
+                if mtch.score > v.2 {
+                    matches_result[v.0] = NucleoDartSnapshot2Match {
+                        mtch: NucleoDartMMatch {
+                            score: mtch.score,
+                            idx: i as u32,
+                        },
+                        handle: handle_b,
+                    };
+                    previous_seen_matches.insert(&item.data.0, (v.0, 0, mtch.score));
+                }
+            }
+            None => {
+                matches_result.push(NucleoDartSnapshot2Match {
+                    mtch: NucleoDartMMatch {
+                        score: mtch.score,
+                        idx: i as u32,
+                    },
+                    handle: handle_b,
+                });
+                previous_seen_matches
+                    .insert(&item.data.0, (matches_result.len() - 1, 0, mtch.score));
+            }
+        };
+    }
+    let boxed = matches_result.into_boxed_slice();
+    let response = NucleoDartSnapshot2 {
+        matches: boxed.as_ptr(),
+        len: boxed.len(),
+    };
+    Box::leak(boxed);
+    return response;
 }

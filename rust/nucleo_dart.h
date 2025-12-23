@@ -23,7 +23,29 @@ typedef struct NucleoDartString {
   uintptr_t len;
 } NucleoDartString;
 
-typedef void (*AppendCallbackFn)(struct NucleoDartString);
+typedef struct NucleoDartMatch {
+  uint32_t score;
+  uint32_t index;
+  const uint8_t *ptr;
+  uintptr_t len;
+} NucleoDartMatch;
+
+typedef void (*AppendCallbackFn)(struct NucleoDartMatch);
+
+typedef struct NucleoDartMMatch {
+  uint32_t score;
+  uint32_t idx;
+} NucleoDartMMatch;
+
+typedef struct NucleoDartSnapshot2Match {
+  struct NucleoDartMMatch mtch;
+  const struct SnapshotHandle *handle;
+} NucleoDartSnapshot2Match;
+
+typedef struct NucleoDartSnapshot2 {
+  const struct NucleoDartSnapshot2Match *matches;
+  uintptr_t len;
+} NucleoDartSnapshot2;
 
 struct NucleoHandle *nucleo_dart_new(VoidCallbackFn cb);
 
@@ -55,10 +77,15 @@ uint32_t nucleo_dart_snapshot_get_matched_item_count(const struct SnapshotHandle
 struct NucleoDartString nucleo_dart_snapshot_get_item(const struct SnapshotHandle *handle,
                                                       uint32_t index);
 
-struct NucleoDartString nucleo_dart_snapshot_get_matched_item(const struct SnapshotHandle *handle,
-                                                              uint32_t index);
+struct NucleoDartMatch nucleo_dart_snapshot_get_matched_item(const struct SnapshotHandle *handle,
+                                                             uint32_t index);
 
 void nucleo_dart_snapshot_get_matched_items(const struct SnapshotHandle *handle,
                                             uint32_t start,
                                             uint32_t end,
                                             AppendCallbackFn cb);
+
+void nucleo_dart_destroy_join(const struct NucleoDartSnapshot2 *handle);
+
+struct NucleoDartSnapshot2 nucleo_dart_join_snapshot(const struct SnapshotHandle *handle_a,
+                                                     const struct SnapshotHandle *handle_b);

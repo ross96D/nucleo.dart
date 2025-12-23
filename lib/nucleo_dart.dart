@@ -207,34 +207,68 @@ class NucleoDart implements Finalizable {
   }
 }
 
+class MatchIndex {
+  final int index;
+  final int score;
+
+  const MatchIndex(this.index, this.score);
+
+  @override
+  bool operator ==(Object other) {
+    return other is MatchIndex && index == other.index && score == other.score;
+  }
+
+  @override
+  int get hashCode => Object.hashAll([index, score]);
+}
+
+class MatchItem {
+  final int index;
+  final String string;
+  final int score;
+
+  const MatchItem(this.index, this.string, this.score);
+
+  @override
+  bool operator ==(Object other) {
+    return other is MatchItem &&
+        index == other.index &&
+        string == other.string &&
+        score == other.score;
+  }
+
+  @override
+  int get hashCode => Object.hashAll([index, string, score]);
+}
+
 class Snapshot {
   final Pointer<SnapshotHandle> _handle;
 
   Snapshot._(this._handle);
 
-  (int, String) item(int index) {
-    assert(index >= 0);
-    return nucleo_dart_snapshot_get_item(_handle, index).toDartString();
+  JoinSnapshot join(Snapshot other) {
+    return JoinSnapshot._(nucleo_dart_join_snapshot(_handle, other._handle));
   }
 
-  (int, String) matchedItem(int index) {
+  MatchItem matchedItem(int index) {
     assert(index >= 0);
-    return nucleo_dart_snapshot_get_matched_item(_handle, index).toDartString();
+    return nucleo_dart_snapshot_get_matched_item(_handle, index).toItem();
   }
 
-  int matchedItemIndex(int index) {
+  MatchIndex matchedItemIndex(int index) {
     assert(index >= 0);
-    return nucleo_dart_snapshot_get_matched_item(_handle, index).index;
+    final match = nucleo_dart_snapshot_get_matched_item(_handle, index);
+    return MatchIndex(match.index, match.score);
   }
 
-  List<(int, String)> matchedItems([int start = 0, int? end]) {
+  List<MatchItem> matchedItems([int start = 0, int? end]) {
     end ??= matchedCount;
-    final response = <(int, String)>[];
+    final response = <MatchItem>[];
 
-    final callback = NativeCallable<Void Function(NucleoDartString)>.isolateLocal((
-      NucleoDartString v,
+    final callback = NativeCallable<Void Function(NucleoDartMatch)>.isolateLocal((
+      NucleoDartMatch v,
     ) {
-      response.add(v.toDartString());
+      response.add(v.toItem());
     });
 
     nucleo_dart_snapshot_get_matched_items(_handle, start, end, callback.nativeFunction);
@@ -242,14 +276,14 @@ class Snapshot {
     return response;
   }
 
-  List<int> matchedItemsIndex([int start = 0, int? end]) {
+  List<MatchIndex> matchedItemsIndex([int start = 0, int? end]) {
     end ??= matchedCount;
-    final response = <int>[];
+    final response = <MatchIndex>[];
 
-    final callback = NativeCallable<Void Function(NucleoDartString)>.isolateLocal((
-      NucleoDartString v,
+    final callback = NativeCallable<Void Function(NucleoDartMatch)>.isolateLocal((
+      NucleoDartMatch v,
     ) {
-      response.add(v.index);
+      response.add(MatchIndex(v.index, v.score));
     });
 
     nucleo_dart_snapshot_get_matched_items(_handle, start, end, callback.nativeFunction);
@@ -266,9 +300,65 @@ class Snapshot {
   }
 }
 
-extension on NucleoDartString {
-  (int, String) toDartString() {
+class JoinSnapshotItem {
+  final int score;
+  final int index;
+  final Snapshot snapshot;
+
+  const JoinSnapshotItem(this.index, this.score, this.snapshot);
+}
+
+class JoinSnapshot implements Finalizable {
+  static Pointer<NativeFunction<Void Function(Pointer<NucleoDartSnapshot2>)>>
+  _addressNucleoDartDestroyJoin = Native.addressOf(nucleo_dart_destroy_join);
+  static final _finalizeJoin = NativeFinalizer(_addressNucleoDartDestroyJoin.cast());
+
+  final NucleoDartSnapshot2 _handle;
+
+  late final Pointer<NucleoDartSnapshot2> _stupidPointer;
+  static _destroyStupidPointer(Pointer<NucleoDartSnapshot2> ptr) => calloc.free(ptr);
+  static final _finalizeStupidPtr = Finalizer(_destroyStupidPointer);
+
+  JoinSnapshot._(this._handle) {
+    _stupidPointer = calloc<NucleoDartSnapshot2>();
+    _stupidPointer.ref = _handle;
+
+    _finalizeStupidPtr.attach(this, _stupidPointer, detach: this);
+    _finalizeJoin.attach(this, Pointer.fromAddress(_stupidPointer.address), detach: this);
+  }
+
+  void destroy() {
+    nucleo_dart_destroy_join(_stupidPointer);
+    calloc.free(_stupidPointer);
+    _finalizeJoin.detach(this);
+    _finalizeStupidPtr.detach(this);
+  }
+
+  MatchIndex item(int index) {
+    assert(index >= 0);
+    final item = _handle.matches[index];
+    return Snapshot._(item.handle).matchedItemIndex(item.mtch.idx);
+  }
+
+  List<MatchIndex> items([int start = 0, int? end]) {
+    end ??= _handle.len;
+    assert(end <= _handle.len);
+    final response = <MatchIndex>[];
+
+    for (int i = start; i < end; i++) {
+      final item = (_handle.matches + i).ref;
+      response.add(Snapshot._(item.handle).matchedItemIndex(item.mtch.idx));
+    }
+
+    return response;
+  }
+
+  int get length => _handle.len;
+}
+
+extension on NucleoDartMatch {
+  MatchItem toItem() {
     Pointer<Utf8> nativeStrUtf8 = this.ptr.cast();
-    return (this.index, nativeStrUtf8.toDartString(length: this.len));
+    return MatchItem(this.index, nativeStrUtf8.toDartString(length: this.len), score);
   }
 }
