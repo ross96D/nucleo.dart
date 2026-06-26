@@ -13,16 +13,20 @@ void main(List<String> args) async {
         );
         final libUri = input.outputDirectory.resolve(libName);
 
-        final result = await Process.run("cargo", [
-          "build",
-          "--release",
-        ], workingDirectory: input.packageRoot.resolve("rust").path);
-        if (result.exitCode != 0) {
-          throw "cargo command exitCode ${result.exitCode}";
+        final precompiledPath = Platform.environment['PRECOMPILED_SO_PATH'];
+        if (precompiledPath != null) {
+          File(precompiledPath).copy(libUri.path);
+        } else {
+          final result = await Process.run("cargo", [
+            "build",
+            "--release",
+          ], workingDirectory: input.packageRoot.resolve("rust").path);
+          if (result.exitCode != 0) {
+            throw "cargo command exitCode ${result.exitCode}";
+          }
+          File(input.packageRoot.resolve("rust/target/release/$libName").path)
+              .copy(libUri.path);
         }
-
-        final file = File(input.packageRoot.resolve("rust/target/release/$libName").path);
-        file.copy(libUri.path);
 
         output.dependencies.add(input.packageRoot.resolve("rust/src/lib.rs"));
         output.assets.code.add(
