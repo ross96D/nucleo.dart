@@ -13,7 +13,7 @@ void main(List<String> args) async {
         );
         final libUri = input.outputDirectory.resolve(libName);
 
-        final precompiledPath = Platform.environment['PRECOMPILED_SO_PATH'];
+        final precompiledPath = Platform.environment['NIX_NUCLEO_PRECOMPILED_SO_PATH'];
         if (precompiledPath != null) {
           File(precompiledPath).copy(libUri.path);
         } else {
